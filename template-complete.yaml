@@ -148,7 +148,7 @@ parameters:
     of your repository.
   displayName: Context Directory
   name: CONTEXT_DIR
-  - description: The exposed hostname that will route to the Node.js service, if left
+- description: The exposed hostname that will route to the Node.js service, if left
     blank a value will be defaulted.
   displayName: Application Hostname
   name: APPLICATION_DOMAIN
