@@ -1,0 +1,167 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: webapp
+metadata:
+  annotations:
+    description: "基于nodejs 和gulp编译构建的web应用"
+    iconClass: icon-nodejs
+    tags: webapp,nodejs,gulp
+  name: webapp
+objects:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      description: Exposes and load balances the application pods
+    name: ${NAME}
+  spec:
+    ports:
+    - name: ${NAME}
+      port: 8080
+      targetPort: 8080
+    selector:
+      name: ${NAME}
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: ${NAME}
+  spec:
+    host: ${APPLICATION_DOMAIN}
+    to:
+      kind: Service
+      name: ${NAME}
+- apiVersion: v1
+  kind: ImageStream
+    metadata:
+    annotations:
+      description: Keeps track of changes in the application image
+    name: ${NAME}
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    annotations:
+      description: Defines how to build the application
+    name: ${NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${NAME}:latest
+    source:
+      contextDir: ${CONTEXT_DIR}
+      git:
+        ref: ${SOURCE_REPOSITORY_REF}
+        uri: ${SOURCE_REPOSITORY_URL}
+      sourceSecret:
+        name: ${SOURCE_SECRET}
+      type: Git
+    strategy:
+      sourceStrategy:
+        env: []
+        forcePull: true
+        from:
+          kind: ImageStreamTag
+          name: ${BASIC_IMAGE_NAME}
+          namespace: ${BASIC_IMAGE_NAMESPACE}
+      type: Source
+    triggers:
+    - type: ImageChange
+    - type: ConfigChange
+    - generic:
+        secret: ${GENERIC_WEBHOOK_SECRET}
+      type: Generic
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    annotations:
+      description: Defines how to deploy the application server
+    name: ${NAME}
+  spec:
+    replicas: 1
+    selector:
+      name: ${NAME}
+    strategy:
+      type: Rolling
+    template:
+      metadata:
+        labels:
+          name: ${NAME}
+        name: ${NAME}
+      spec:
+        containers:
+        - env: []
+          image: $REGISTRY_HOST/${NAMESPACE}/${NAME}:latest
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            timeoutSeconds: 3
+          name: ${NAME}
+          ports:
+          - containerPort: 8080
+          resources:
+            limits:
+              memory: ${MEMORY_LIMIT}
+    triggers:
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - webapp
+        from:
+          kind: ImageStreamTag
+                    name: ${NAME}:latest
+      type: ImageChange
+    - type: ConfigChange
+parameters:
+- description: The name assigned to all of the frontend objects defined in this template.
+  displayName: Name
+  name: NAME
+  required: true
+- description: The OpenShift Namespace where the ImageStream resides.
+  displayName: Namespace
+  name: NAMESPACE
+  required: true
+  value: openshift
+- description: Maximum amount of memory the container can use.
+  displayName: Memory Limit
+  name: MEMORY_LIMIT
+  required: true
+  value: 1Gi
+- description: 待打包运行项目的git地址
+  displayName: Git Repository URL
+  name: SOURCE_REPOSITORY_URL
+  required: true
+- description: 基础镜像所在的工程名
+  displayName: Basic image namespace
+  name: BASIC_IMAGE_NAMESPACE
+  required: true
+- description: "基础镜像名称，格式为：name:tag，如：nodejs:latest."
+  displayName: Basic image name
+  name: BASIC_IMAGE_NAME
+  required: true
+- description: "Git分支名或tag，不设置则使用默认分支"
+  displayName: Git Reference
+  name: SOURCE_REPOSITORY_REF
+- description: Set this to the relative path to your project if it is not in the root
+    of your repository.
+  displayName: Context Directory
+  name: CONTEXT_DIR
+  - description: The exposed hostname that will route to the Node.js service, if left
+    blank a value will be defaulted.
+  displayName: Application Hostname
+  name: APPLICATION_DOMAIN
+- description: "web hook密钥字段，不填写会自动生成。"
+  displayName: Generic Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GENERIC_WEBHOOK_SECRET
+- description: The secret name for git
+  displayName: Secret for git
+  name: SOURCE_SECRET
+  required: true
+- description: 仓库地址或者ip端口
+  displayName: registry ip or hostname
+  name: REGISTRY_HOST
+  required: true
